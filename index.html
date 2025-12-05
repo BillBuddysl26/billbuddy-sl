@@ -188,7 +188,7 @@
                             <span class="text-2xl text-gray-400 font-medium mr-1">Rs.</span>
                             <span id="current-bill" class="text-5xl font-extrabold text-gray-900 tracking-tight">0</span>
                         </div>
-                        <p id="current-breakdown" class="text-xs text-gray-400 mt-2">Includes Fixed Charge</p>
+                        <p id="current-breakdown" class="text-xs text-gray-400 mt-2">Includes Fixed Charge and Taxes</p>
                     </div>
 
                     <hr class="border-gray-200">
@@ -284,12 +284,17 @@
             projectedUnits: 0,
             chartInstance: null
         };
+        
+        // --- Constants ---
+        // Estimated total Government Taxes/Levies (VAT, S.R.L., etc.) applied to the subtotal (Unit Cost + Fixed Charge)
+        const TAX_RATE = 0.15; // 15% 
 
-        // --- Data: Estimated SL Tariff Structures 2026 ---
+        // --- Data: SL Tariff Structures ---
 
-        // Electricity Tariff (CEB) - Based on the original structure for clean logic
+        // Electricity Tariff (CEB) - Uses Total Rate Pricing (highest rate applies to all units)
         const electricityTariff = {
             unitName: "Units (kWh)",
+            pricingModel: 'total', // Total Rate Pricing (Highest tier rate applies to ALL units)
             tiers: [
                 { limit: 30, rate: 8.00, fixed: 150 },   // 0-30
                 { limit: 60, rate: 10.00, fixed: 300 },  // 31-60
@@ -300,61 +305,80 @@
             ]
         };
 
-        // Water Tariff (NWSDB) - Mocked based on m³
+        // Water Tariff (NWSDB) - Corrected to use Total Rate Pricing to reflect bill shock
         const waterTariff = {
             unitName: "Volume (m³)",
+            pricingModel: 'total', // Total Rate Pricing (Highest tier rate applies to ALL units)
             tiers: [
-                { limit: 5, rate: 5.00, fixed: 50 },
-                { limit: 10, rate: 15.00, fixed: 100 },
-                { limit: 15, rate: 25.00, fixed: 200 },
-                { limit: 20, rate: 45.00, fixed: 300 },
-                { limit: Infinity, rate: 65.00, fixed: 500 }
+                { limit: 5, rate: 10.00, fixed: 180.00 },
+                { limit: 10, rate: 15.00, fixed: 200.00 },
+                { limit: 15, rate: 20.00, fixed: 300.00 },
+                { limit: 20, rate: 45.00, fixed: 400.00 },
+                { limit: 25, rate: 65.00, fixed: 500.00 },
+                { limit: 30, rate: 80.00, fixed: 800.00 }, // Rate used for 28m³ calculation
+                { limit: 40, rate: 100.00, fixed: 1000.00 },
+                { limit: Infinity, rate: 130.00, fixed: 1200.00 }
             ]
         };
 
         // --- Core Calculation Functions ---
 
-        // 1. Unified Calculation Logic
+        // 1. Unified Calculation Logic - NOW SUPPORTS TOTAL RATE PRICING
         function calculateBillCost(units, type) {
             const currentTariff = type === 'water' ? waterTariff : electricityTariff;
-            let totalCost = 0;
-            let fixedCharge = 0;
-            let remaining = units;
-            let lastLimit = 0;
-            let fixedSet = false;
-
-            for (const tier of currentTariff.tiers) {
-                const blockStart = lastLimit;
-                const blockEnd = tier.limit;
-
-                // Calculate units consumed within this block's range
-                const unitsInBlockRange = Math.min(units, blockEnd) - blockStart;
-
-                if (unitsInBlockRange > 0) {
-                    // Units to charge at this tier's rate
-                    const unitsToCharge = Math.min(remaining, unitsInBlockRange);
-
-                    if (unitsToCharge > 0) {
-                        totalCost += unitsToCharge * tier.rate;
-                        remaining -= unitsToCharge;
-                        
-                        // Set the fixed charge based on the highest tier reached so far.
-                        fixedCharge = tier.fixed;
-                        fixedSet = true;
+            
+            let highestTierReached = currentTariff.tiers[0]; // Default to the lowest tier
+            
+            // 1. Determine the Highest Tier Reached
+            if (units > 0) {
+                for (const tier of currentTariff.tiers) {
+                    if (units <= tier.limit) {
+                        highestTierReached = tier;
+                        break;
                     }
+                    // If we pass the limit and it's not the last tier, keep going
+                    highestTierReached = tier; 
                 }
-                
-                if (remaining <= 0) break;
-                
-                lastLimit = tier.limit;
             }
             
-            // If the user entered 0 units, set the fixed charge to the lowest tier's fixed charge
-            if (units === 0 && currentTariff.tiers.length > 0) {
-                 fixedCharge = currentTariff.tiers[0].fixed;
+            let totalUnitCost = 0;
+            let totalFixedCharge = 0;
+
+            if (currentTariff.pricingModel === 'total') {
+                // Total Rate Pricing (Bill Shock Model: Highest unit rate applies to ALL units)
+                const rate = highestTierReached.rate;
+                totalUnitCost = units * rate;
+                totalFixedCharge = highestTierReached.fixed;
+            
+            } else {
+                // Marginal Pricing (Block by Block - less common for domestic SL utilities)
+                let remainingUnits = units;
+                let lastLimit = 0;
+                
+                for (const tier of currentTariff.tiers) {
+                    const blockUnits = Math.min(remainingUnits, tier.limit - lastLimit);
+                    if (blockUnits > 0) {
+                        totalUnitCost += blockUnits * tier.rate;
+                        remainingUnits -= blockUnits;
+                    }
+                    if (remainingUnits <= 0) break;
+                    lastLimit = tier.limit;
+                }
+                totalFixedCharge = highestTierReached.fixed;
             }
 
-            return { cost: totalCost, fixed: fixedCharge, total: totalCost + fixedCharge, units: units };
+            const subtotal = totalUnitCost + totalFixedCharge;
+            const taxes = subtotal * TAX_RATE;
+            const finalTotal = subtotal + taxes;
+
+            return { 
+                unitCost: totalUnitCost, 
+                fixedCharge: totalFixedCharge, 
+                subtotal: subtotal,
+                taxes: taxes,
+                total: finalTotal, 
+                units: units 
+            };
         }
 
         // 2. Set Bill Type (Electricity/Water)
@@ -372,7 +396,7 @@
                 btnWtr.classList.add('text-teal-200', 'hover:bg-teal-500');
                 document.getElementById('calc-title').innerText = 'Domestic Electricity Bill Calculator';
                 document.getElementById('chart-header').innerText = 'Your Electricity Tier Status (kWh)';
-                document.getElementById('current-breakdown').innerText = 'Energy: Rs.0 + Fixed: Rs.0';
+                document.getElementById('current-breakdown').innerText = 'Energy: Rs.0 + Fixed: Rs.0 + Taxes: Rs.0';
 
             } else {
                 btnWtr.classList.add('bg-white', 'text-teal-700', 'shadow-sm');
@@ -381,7 +405,7 @@
                 btnEl.classList.add('text-teal-200', 'hover:bg-teal-500');
                 document.getElementById('calc-title').innerText = 'Domestic Water Bill Calculator';
                 document.getElementById('chart-header').innerText = 'Your Water Tier Status (m³)';
-                document.getElementById('current-breakdown').innerText = 'Water: Rs.0 + Fixed: Rs.0';
+                document.getElementById('current-breakdown').innerText = 'Water: Rs.0 + Fixed: Rs.0 + Taxes: Rs.0';
             }
             
             // Update Units Label
@@ -429,7 +453,7 @@
             animateValue("current-bill", parseInt(document.getElementById('current-bill').innerText.replace(/,/g, '')), Math.round(currentBillData.total), 500);
             animateValue("projected-bill", parseInt(document.getElementById('projected-bill').innerText.replace(/,/g, '')), Math.round(projectedBillData.total), 500);
 
-            document.getElementById('current-breakdown').innerText = `${unitName}: Rs.${Math.round(currentBillData.cost)} + Fixed: Rs.${currentBillData.fixed}`;
+            document.getElementById('current-breakdown').innerText = `${unitName}: Rs.${Math.round(currentBillData.unitCost)} + Fixed: Rs.${currentBillData.fixedCharge} + Taxes: Rs.${Math.round(currentBillData.taxes)}`;
             document.getElementById('projected-units').innerText = `Forecast: ${Math.round(projectedUnits)} ${unitAbbreviation} @ Month End`;
 
             // Update Chart
@@ -451,11 +475,15 @@
                 const unitAbbreviation = 'units';
                 if (projUnits > 60 && projUnits <= 65) {
                     show = true;
-                    const savings = calculateBillCost(projUnits, type).total - calculateBillCost(60, type).total;
+                    // Calculate savings by dropping to the 60 unit tier (highest rate for 0-60 is 10.00, fixed 300)
+                    const costAt60 = calculateBillCost(60, type).total;
+                    const savings = calculateBillCost(projUnits, type).total - costAt60;
                     msg = `⚠️ <strong>Critical Zone!</strong> You are just over 60 ${unitAbbreviation}. If you cut usage by <strong>${Math.round(projUnits - 60)} ${unitAbbreviation}</strong>, you drop to the cheaper tariff group and save <strong>Rs. ${Math.round(savings)}</strong>!`;
                 } else if (projUnits > 90 && projUnits <= 95) {
                     show = true;
-                    const savings = calculateBillCost(projUnits, type).total - calculateBillCost(90, type).total;
+                    // Calculate savings by dropping to the 90 unit tier (highest rate for 0-90 is 18.00, fixed 400)
+                    const costAt90 = calculateBillCost(90, type).total;
+                    const savings = calculateBillCost(projUnits, type).total - costAt90;
                     msg = `⚠️ You are entering the <strong>Heavy Usage Tier</strong> (90+). Reduce usage by ${Math.round(projUnits - 90)} ${unitAbbreviation} to save approx <strong>Rs. ${Math.round(savings)}</strong>.`;
                 } else if (projUnits > 120) {
                     show = true;
@@ -468,7 +496,9 @@
                  const unitAbbreviation = 'm³';
                  if (projUnits > 15 && projUnits <= 16) {
                     show = true;
-                    const savings = calculateBillCost(projUnits, type).total - calculateBillCost(15, type).total;
+                    // Calculate savings by dropping to the 15 unit tier (highest rate for 0-15 is 20.00, fixed 300)
+                    const costAt15 = calculateBillCost(15, type).total;
+                    const savings = calculateBillCost(projUnits, type).total - costAt15;
                     msg = `⚠️ <strong>High Water Jump!</strong> You are just over 15 ${unitAbbreviation}. Dropping below 15 ${unitAbbreviation} could save you <strong>Rs. ${Math.round(savings)}</strong>. Fix any leaks immediately!`;
                 } else if (projUnits > 20) {
                     show = true;
@@ -552,6 +582,7 @@
                 ];
 
             } else { // Water
+                // Water Tiers are 15m³ and 20m³ for the chart visual guides
                 limit1 = 15;
                 limit2 = 20;
                 yAxisLabel = 'Volume (m³)';
