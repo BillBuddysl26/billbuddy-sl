@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BillBuddy SL 2026 - Utility Bill Predictor</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Warm neutral light gray */
+            color: #1f2937;
+        }
+
+        /* Chart Container Constraint - CRITICAL for Responsiveness */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* Prevent wide charts on desktop */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height */
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+
+        /* Custom Scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* Ad Placeholder Styling */
+        .ad-space {
+            background-color: #e5e7eb;
+            border: 2px dashed #9ca3af;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6b7280;
+            font-weight: 600;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+        }
+        .ad-space:hover {
+            background-color: #d1d5db;
+            border-color: #6b7280;
+        }
+    </style>
+
+    <!-- Placeholder Comments Required by Prompt -->
+    <!-- Deployment Note: Forced update to trigger new GitHub Pages build. -->
+    <!-- Chosen Palette: Warm Neutrals (Slate/Gray base) with Primary Blue/Teal accents for Energy context. -->
+    <!-- Application Structure Plan: 
+         1. Header & Hero: Immediate value proposition ("Predict Bill").
+         2. Calculator Card (The Core): Input fields for units/dates, delivering instant "Current" and "Projected" costs. Includes a seamless Electricity/Water switch.
+         3. Visualization Section: A bar chart showing the user's consumption relative to the tiered pricing blocks.
+         4. AI Savings Tip: Dynamic text block incentivizing lower usage.
+         5. Ad Slots: Strategically placed between high-value interactions.
+    -->
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-2xl font-bold text-teal-600">⚡💧 BillBuddy<span class="text-gray-500 text-sm font-normal ml-1">SL 2026</span></span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="scrollToSection('calculator')" class="text-gray-600 hover:text-teal-600 font-medium text-sm">Calculator</button>
+                    <button onclick="scrollToSection('about')" class="text-gray-600 hover:text-teal-600 font-medium text-sm">Strategy</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-4xl">
+
+        <!-- Ad Space 1 (Top) -->
+        <div class="w-full h-24 ad-space mb-8 rounded-lg">
+            Ad Space (Top Banner)
+        </div>
+
+        <!-- Hero Section -->
+        <div class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Predict Your Utility Bill.</h1>
+            <p class="text-lg text-gray-600 max-w-2xl mx-auto">
+                Calculate your projected **Electricity (kWh)** or **Water (m³)** bill 
+                <span class="text-teal-600 font-semibold">before</span> it arrives.
+            </p>
+        </div>
+
+        <!-- Calculator Section -->
+        <div id="calculator" class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+            
+            <!-- Section Header and Utility Switch -->
+            <div class="bg-teal-600 px-6 py-4 text-center">
+                <h2 id="calc-title" class="text-white text-xl font-semibold mb-3">
+                    Domestic Electricity Bill Calculator
+                </h2>
+                <div class="flex space-x-4 p-1 bg-teal-700 rounded-lg max-w-xs mx-auto">
+                    <button id="mode-electricity" onclick="setBillType('electricity')" class="flex-1 py-1 px-3 rounded-md text-sm font-semibold transition-all bg-white text-teal-700 shadow-sm">
+                        ⚡ Electricity
+                    </button>
+                    <button id="mode-water" onclick="setBillType('water')" class="flex-1 py-1 px-3 rounded-md text-sm font-medium text-teal-200 hover:bg-teal-500">
+                        💧 Water
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                <!-- Input Column -->
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Method</label>
+                        <div class="flex space-x-4 p-1 bg-gray-100 rounded-lg">
+                            <button id="btn-units" class="flex-1 py-2 px-4 rounded-md bg-white shadow-sm text-sm font-semibold text-gray-800 transition-all">Direct Usage</button>
+                            <button id="btn-reading" class="flex-1 py-2 px-4 rounded-md text-sm font-medium text-gray-500 hover:text-gray-800 transition-all">Meter Reading</button>
+                        </div>
+                    </div>
+
+                    <!-- Direct Units Input -->
+                    <div id="input-units-group">
+                        <label for="units" class="block text-sm font-medium text-gray-700" id="units-label">Units (kWh) Consumed So Far</label>
+                        <input type="number" id="units" class="mt-1 block w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 text-lg" placeholder="e.g. 85">
+                    </div>
+
+                    <!-- Meter Reading Inputs (Hidden by default) -->
+                    <div id="input-reading-group" class="hidden space-y-4">
+                        <div>
+                            <label for="prev-reading" class="block text-sm font-medium text-gray-700">Previous Reading</label>
+                            <input type="number" id="prev-reading" class="mt-1 block w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500" placeholder="e.g. 14500">
+                        </div>
+                        <div>
+                            <label for="curr-reading" class="block text-sm font-medium text-gray-700">Current Reading</label>
+                            <input type="number" id="curr-reading" class="mt-1 block w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500" placeholder="e.g. 14585">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="days" class="block text-sm font-medium text-gray-700">Days Elapsed (for Prediction)</label>
+                        <input type="range" id="days" min="1" max="30" value="30" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>1 Day</span>
+                            <span id="days-display" class="font-bold text-teal-600">30 Days (Full Month)</span>
+                        </div>
+                    </div>
+
+                    <button id="calculate-btn" class="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-lg transform active:scale-95">
+                        Calculate Bill
+                    </button>
+                </div>
+
+                <!-- Results Column -->
+                <div class="flex flex-col justify-center space-y-6 bg-gray-50 rounded-xl p-6 border border-gray-200">
+                    
+                    <!-- Current Bill Display -->
+                    <div class="text-center">
+                        <p class="text-sm text-gray-500 uppercase tracking-wide font-semibold">Current Bill (To Date)</p>
+                        <div class="flex items-baseline justify-center mt-1">
+                            <span class="text-2xl text-gray-400 font-medium mr-1">Rs.</span>
+                            <span id="current-bill" class="text-5xl font-extrabold text-gray-900 tracking-tight">0</span>
+                        </div>
+                        <p id="current-breakdown" class="text-xs text-gray-400 mt-2">Includes Fixed Charge</p>
+                    </div>
+
+                    <hr class="border-gray-200">
+
+                    <!-- Projected Bill Display -->
+                    <div class="text-center">
+                        <p class="text-sm text-gray-500 uppercase tracking-wide font-semibold">Projected Month-End</p>
+                        <div class="flex items-baseline justify-center mt-1">
+                            <span class="text-xl text-gray-400 font-medium mr-1">Rs.</span>
+                            <span id="projected-bill" class="text-4xl font-bold text-teal-600 tracking-tight">0</span>
+                        </div>
+                        <p id="projected-units" class="text-xs text-teal-600 mt-2 font-medium">Forecast: 0 Units @ Month End</p>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Visualization Section -->
+            <div class="bg-white border-t border-gray-100 p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4" id="chart-header">Your Electricity Tier Status (kWh)</h3>
+                
+                <!-- Chart Container with Mandatory Styling -->
+                <div class="chart-container">
+                    <canvas id="usageChart"></canvas>
+                </div>
+
+                <!-- Dynamic AI Savings Tip -->
+                <div id="ai-tip-box" class="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-lg hidden transition-all duration-500">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <!-- Unicode Icon for Idea/Tip -->
+                            <span class="text-2xl">💡</span>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-yellow-800">Smart Savings Tip</h3>
+                            <div class="mt-1 text-sm text-yellow-700" id="ai-tip-text">
+                                <!-- Tip text injected by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ad Space 2 (Middle) -->
+        <div class="w-full h-24 ad-space my-8 rounded-lg">
+            Ad Space (Mid-Content)
+        </div>
+
+        <!-- Strategy Context Section (About) -->
+        <div id="about" class="bg-white rounded-xl shadow-md p-8 mb-8">
+            <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">About this Mini-App (Strategy 2026)</h3>
+            <p class="text-gray-600 mb-4">
+                This application serves as a comprehensive domestic utility predictor for the Sri Lankan market, covering both primary services.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <span class="text-2xl mb-2 block">🔁</span>
+                    <h4 class="font-bold text-gray-800">Repeat Visits</h4>
+                    <p class="text-sm text-gray-600">Users return weekly to check their status before the bill cycle ends, increasing ad impressions.</p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <span class="text-2xl mb-2 block">🧠</span>
+                    <h4 class="font-bold text-gray-800">Logic-Driven</h4>
+                    <p class="text-sm text-gray-600">No heavy backend needed. The complex SL tariff logic runs entirely in the browser.</p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <span class="text-2xl mb-2 block">🇱🇰</span>
+                    <h4 class="font-bold text-gray-800">Localized</h4>
+                    <p class="text-sm text-gray-600">Tailored specifically to the "Block Tariff" shocks unique to Sri Lanka.</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-gray-300 py-8">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm">© 2026 BillBuddy SL. Built for the Sri Lankan Community.</p>
+            <p class="text-xs text-gray-500 mt-2">Tariff rates are estimates based on 2025/26 projections. Actual CEB/NWSDB rates may vary.</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- State Management ---
+        const state = {
+            billType: 'electricity', // 'electricity' or 'water'
+            mode: 'units', // 'units' or 'reading'
+            units: 0,
+            days: 30,
+            projectedUnits: 0,
+            chartInstance: null
+        };
+
+        // --- Data: Estimated SL Tariff Structures 2026 ---
+
+        // Electricity Tariff (CEB) - Based on the original structure for clean logic
+        const electricityTariff = {
+            unitName: "Units (kWh)",
+            tiers: [
+                { limit: 30, rate: 8.00, fixed: 150 },   // 0-30
+                { limit: 60, rate: 10.00, fixed: 300 },  // 31-60
+                { limit: 90, rate: 18.00, fixed: 400 },  // 61-90 (Start of Group B)
+                { limit: 120, rate: 30.00, fixed: 1000 },// 91-120
+                { limit: 180, rate: 50.00, fixed: 1500 },// 121-180
+                { limit: Infinity, rate: 75.00, fixed: 2000 } // >180
+            ]
+        };
+
+        // Water Tariff (NWSDB) - Mocked based on m³
+        const waterTariff = {
+            unitName: "Volume (m³)",
+            tiers: [
+                { limit: 5, rate: 5.00, fixed: 50 },
+                { limit: 10, rate: 15.00, fixed: 100 },
+                { limit: 15, rate: 25.00, fixed: 200 },
+                { limit: 20, rate: 45.00, fixed: 300 },
+                { limit: Infinity, rate: 65.00, fixed: 500 }
+            ]
+        };
+
+        // --- Core Calculation Functions ---
+
+        // 1. Unified Calculation Logic
+        function calculateBillCost(units, type) {
+            const currentTariff = type === 'water' ? waterTariff : electricityTariff;
+            let totalCost = 0;
+            let fixedCharge = 0;
+            let remaining = units;
+            let lastLimit = 0;
+            let fixedSet = false;
+
+            for (const tier of currentTariff.tiers) {
+                const blockStart = lastLimit;
+                const blockEnd = tier.limit;
+
+                // Calculate units consumed within this block's range
+                const unitsInBlockRange = Math.min(units, blockEnd) - blockStart;
+
+                if (unitsInBlockRange > 0) {
+                    // Units to charge at this tier's rate
+                    const unitsToCharge = Math.min(remaining, unitsInBlockRange);
+
+                    if (unitsToCharge > 0) {
+                        totalCost += unitsToCharge * tier.rate;
+                        remaining -= unitsToCharge;
+                        
+                        // Set the fixed charge based on the highest tier reached so far.
+                        fixedCharge = tier.fixed;
+                        fixedSet = true;
+                    }
+                }
+                
+                if (remaining <= 0) break;
+                
+                lastLimit = tier.limit;
+            }
+            
+            // If the user entered 0 units, set the fixed charge to the lowest tier's fixed charge
+            if (units === 0 && currentTariff.tiers.length > 0) {
+                 fixedCharge = currentTariff.tiers[0].fixed;
+            }
+
+            return { cost: totalCost, fixed: fixedCharge, total: totalCost + fixedCharge, units: units };
+        }
+
+        // 2. Set Bill Type (Electricity/Water)
+        function setBillType(type) {
+            state.billType = type;
+
+            // Update button styles
+            const btnEl = document.getElementById('mode-electricity');
+            const btnWtr = document.getElementById('mode-water');
+            
+            if (type === 'electricity') {
+                btnEl.classList.add('bg-white', 'text-teal-700', 'shadow-sm');
+                btnEl.classList.remove('text-teal-200', 'hover:bg-teal-500');
+                btnWtr.classList.remove('bg-white', 'text-teal-700', 'shadow-sm');
+                btnWtr.classList.add('text-teal-200', 'hover:bg-teal-500');
+                document.getElementById('calc-title').innerText = 'Domestic Electricity Bill Calculator';
+                document.getElementById('chart-header').innerText = 'Your Electricity Tier Status (kWh)';
+                document.getElementById('current-breakdown').innerText = 'Energy: Rs.0 + Fixed: Rs.0';
+
+            } else {
+                btnWtr.classList.add('bg-white', 'text-teal-700', 'shadow-sm');
+                btnWtr.classList.remove('text-teal-200', 'hover:bg-teal-500');
+                btnEl.classList.remove('bg-white', 'text-teal-700', 'shadow-sm');
+                btnEl.classList.add('text-teal-200', 'hover:bg-teal-500');
+                document.getElementById('calc-title').innerText = 'Domestic Water Bill Calculator';
+                document.getElementById('chart-header').innerText = 'Your Water Tier Status (m³)';
+                document.getElementById('current-breakdown').innerText = 'Water: Rs.0 + Fixed: Rs.0';
+            }
+            
+            // Update Units Label
+            document.getElementById('units-label').innerText = `${type === 'electricity' ? 'Units (kWh)' : 'Volume (m³)'} Consumed So Far`;
+
+            // Rerun calculation for new type
+            updateUI();
+        }
+
+
+        // 3. Update UI
+        function updateUI() {
+            // Get Inputs
+            let currentUnits = 0;
+            if (state.mode === 'units') {
+                currentUnits = parseFloat(document.getElementById('units').value) || 0;
+            } else {
+                const prev = parseFloat(document.getElementById('prev-reading').value) || 0;
+                const curr = parseFloat(document.getElementById('curr-reading').value) || 0;
+                currentUnits = Math.max(0, curr - prev);
+            }
+            state.units = currentUnits;
+
+            // Get Days
+            state.days = parseInt(document.getElementById('days').value);
+            document.getElementById('days-display').innerText = `${state.days} Day${state.days !== 1 ? 's' : ''}`;
+            if(state.days === 30) document.getElementById('days-display').innerText = "30 Days (Full Month)";
+
+            // Calculate Current Bill
+            const currentBillData = calculateBillCost(currentUnits, state.billType);
+            
+            // Calculate Projection
+            let projectedUnits = currentUnits;
+            if (state.days < 30 && state.days > 0) {
+                const dailyAvg = currentUnits / state.days;
+                projectedUnits = dailyAvg * 30;
+            }
+            state.projectedUnits = projectedUnits;
+            const projectedBillData = calculateBillCost(projectedUnits, state.billType);
+            
+            const unitAbbreviation = state.billType === 'electricity' ? 'kWh' : 'm³';
+            const unitName = state.billType === 'electricity' ? 'Energy' : 'Water';
+
+            // Update DOM Numbers
+            animateValue("current-bill", parseInt(document.getElementById('current-bill').innerText.replace(/,/g, '')), Math.round(currentBillData.total), 500);
+            animateValue("projected-bill", parseInt(document.getElementById('projected-bill').innerText.replace(/,/g, '')), Math.round(projectedBillData.total), 500);
+
+            document.getElementById('current-breakdown').innerText = `${unitName}: Rs.${Math.round(currentBillData.cost)} + Fixed: Rs.${currentBillData.fixed}`;
+            document.getElementById('projected-units').innerText = `Forecast: ${Math.round(projectedUnits)} ${unitAbbreviation} @ Month End`;
+
+            // Update Chart
+            updateChart(currentUnits, projectedUnits, state.billType);
+
+            // Update AI Tip
+            updateAITip(projectedUnits, state.billType);
+        }
+
+        // 4. AI Tip Logic
+        function updateAITip(projUnits, type) {
+            const tipBox = document.getElementById('ai-tip-box');
+            const tipText = document.getElementById('ai-tip-text');
+            
+            let msg = "";
+            let show = false;
+
+            if (type === 'electricity') {
+                const unitAbbreviation = 'units';
+                if (projUnits > 60 && projUnits <= 65) {
+                    show = true;
+                    const savings = calculateBillCost(projUnits, type).total - calculateBillCost(60, type).total;
+                    msg = `⚠️ <strong>Critical Zone!</strong> You are just over 60 ${unitAbbreviation}. If you cut usage by <strong>${Math.round(projUnits - 60)} ${unitAbbreviation}</strong>, you drop to the cheaper tariff group and save <strong>Rs. ${Math.round(savings)}</strong>!`;
+                } else if (projUnits > 90 && projUnits <= 95) {
+                    show = true;
+                    const savings = calculateBillCost(projUnits, type).total - calculateBillCost(90, type).total;
+                    msg = `⚠️ You are entering the <strong>Heavy Usage Tier</strong> (90+). Reduce usage by ${Math.round(projUnits - 90)} ${unitAbbreviation} to save approx <strong>Rs. ${Math.round(savings)}</strong>.`;
+                } else if (projUnits > 120) {
+                    show = true;
+                    msg = `🔴 <strong>High Consumption Alert.</strong> You are in the luxury tax bracket. Try to switch off ACs during peak hours (6 PM - 10 PM) to reduce your bill significantly.`;
+                } else if (projUnits > 0 && projUnits < 30) {
+                    show = true;
+                    msg = `✅ <strong>Great Job!</strong> You are in the "Lifeline" tier (lowest rates). Keep it under 30 ${unitAbbreviation} to maintain this low rate.`;
+                }
+            } else if (type === 'water') {
+                 const unitAbbreviation = 'm³';
+                 if (projUnits > 15 && projUnits <= 16) {
+                    show = true;
+                    const savings = calculateBillCost(projUnits, type).total - calculateBillCost(15, type).total;
+                    msg = `⚠️ <strong>High Water Jump!</strong> You are just over 15 ${unitAbbreviation}. Dropping below 15 ${unitAbbreviation} could save you <strong>Rs. ${Math.round(savings)}</strong>. Fix any leaks immediately!`;
+                } else if (projUnits > 20) {
+                    show = true;
+                    msg = `🔴 <strong>Very High Water Use.</strong> Above 20 ${unitAbbreviation} is the highest rate. Check your garden watering schedule or install low-flow fixtures.`;
+                } else if (projUnits > 0 && projUnits <= 5) {
+                    show = true;
+                    msg = `✅ <strong>Excellent!</strong> You are in the lowest water tier (0-5 ${unitAbbreviation}).`;
+                }
+            }
+
+            if (show) {
+                tipText.innerHTML = msg;
+                tipBox.classList.remove('hidden');
+            } else {
+                tipBox.classList.add('hidden');
+            }
+        }
+
+        // 5. Chart Logic
+        function initChart() {
+            const ctx = document.getElementById('usageChart').getContext('2d');
+            state.chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Current', 'Projected', 'Limit (60)', 'Limit (90)'],
+                    datasets: [{
+                        label: 'Units',
+                        data: [0, 0, 60, 90],
+                        backgroundColor: [
+                            '#0d9488', // Teal (Current)
+                            '#f59e0b', // Amber (Projected)
+                            '#e5e7eb', // Gray (Ref)
+                            '#e5e7eb'  // Gray (Ref)
+                        ],
+                        borderRadius: 4,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // Fits container
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const unit = state.billType === 'electricity' ? 'Units' : 'm³';
+                                    return context.raw + ' ' + unit;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Units (kWh)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart(current, projected, type) {
+            if (!state.chartInstance) return;
+            
+            let limit1, limit2, yAxisLabel;
+
+            if (type === 'electricity') {
+                limit1 = 60;
+                limit2 = 90;
+                yAxisLabel = 'Units (kWh)';
+                state.chartInstance.data.labels = ['Current', 'Projected', 'Limit (60)', 'Limit (90)'];
+                
+                // Color logic: If projected crosses 90, make it red
+                const projColor = projected > 90 ? '#ef4444' : (projected > 60 ? '#f97316' : '#f59e0b');
+                state.chartInstance.data.datasets[0].backgroundColor = [
+                    '#0d9488', 
+                    projColor, 
+                    '#e5e7eb', 
+                    '#e5e7eb'
+                ];
+
+            } else { // Water
+                limit1 = 15;
+                limit2 = 20;
+                yAxisLabel = 'Volume (m³)';
+                state.chartInstance.data.labels = ['Current', 'Projected', 'Limit (15)', 'Limit (20)'];
+
+                // Water color logic
+                const projColor = projected > 20 ? '#1d4ed8' : (projected > 15 ? '#3b82f6' : '#22c55e');
+                state.chartInstance.data.datasets[0].backgroundColor = [
+                    '#0d9488', 
+                    projColor, 
+                    '#e5e7eb', 
+                    '#e5e7eb'
+                ];
+            }
+
+            state.chartInstance.data.datasets[0].data = [current, projected, limit1, limit2];
+            state.chartInstance.options.scales.y.title.text = yAxisLabel;
+            
+            state.chartInstance.update();
+        }
+
+        // 6. Utility: Number Animation
+        function animateValue(id, start, end, duration) {
+            if (start === end) return;
+            const range = end - start;
+            let current = start;
+            const increment = end > start ? 1 : -1;
+            const stepTime = Math.abs(Math.floor(duration / range));
+            const obj = document.getElementById(id);
+            
+            // If jump is too big, just set it to avoid lag
+            if (Math.abs(range) > 100) {
+                obj.innerText = end.toLocaleString();
+                return;
+            }
+
+            const timer = setInterval(function() {
+                current += increment;
+                obj.innerText = current.toLocaleString();
+                if (current == end) {
+                    clearInterval(timer);
+                }
+            }, Math.max(stepTime, 10)); // Min 10ms
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            setBillType('electricity'); // Initialize as electricity
+
+            // Mode Switching (Direct Units vs Meter Reading)
+            const btnUnits = document.getElementById('btn-units');
+            const btnReading = document.getElementById('btn-reading');
+            const groupUnits = document.getElementById('input-units-group');
+            const groupReading = document.getElementById('input-reading-group');
+
+            function updateModeButtons() {
+                if (state.mode === 'units') {
+                    btnUnits.classList.add('bg-white', 'shadow-sm', 'text-gray-800');
+                    btnUnits.classList.remove('text-gray-500');
+                    btnReading.classList.remove('bg-white', 'shadow-sm', 'text-gray-800');
+                    btnReading.classList.add('text-gray-500');
+                    groupUnits.classList.remove('hidden');
+                    groupReading.classList.add('hidden');
+                } else {
+                    btnReading.classList.add('bg-white', 'shadow-sm', 'text-gray-800');
+                    btnReading.classList.remove('text-gray-500');
+                    btnUnits.classList.remove('bg-white', 'shadow-sm', 'text-gray-800');
+                    btnUnits.classList.add('text-gray-500');
+                    groupReading.classList.remove('hidden');
+                    groupUnits.classList.add('hidden');
+                }
+                updateUI();
+            }
+
+            btnUnits.addEventListener('click', () => {
+                state.mode = 'units';
+                updateModeButtons();
+            });
+
+            btnReading.addEventListener('click', () => {
+                state.mode = 'reading';
+                updateModeButtons();
+            });
+            
+            // Input change listeners
+            document.getElementById('calculate-btn').addEventListener('click', updateUI);
+            document.getElementById('days').addEventListener('input', updateUI);
+            document.getElementById('units').addEventListener('input', updateUI);
+            document.getElementById('prev-reading').addEventListener('input', updateUI);
+            document.getElementById('curr-reading').addEventListener('input', updateUI);
+
+            // Initial Load
+            updateModeButtons(); 
+        });
+
+        // Navigation Scroll
+        function scrollToSection(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+
+    </script>
+</body>
+</html>
