@@ -52,23 +52,6 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8; 
         }
-
-        /* Ad Placeholder Styling */
-        .ad-space {
-            background-color: #e5e7eb;
-            border: 2px dashed #9ca3af;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #6b7280;
-            font-weight: 600;
-            font-size: 0.875rem;
-            transition: all 0.3s ease;
-        }
-        .ad-space:hover {
-            background-color: #d1d5db;
-            border-color: #6b7280;
-        }
     </style>
 
     <!-- Placeholder Comments Required by Prompt -->
@@ -102,9 +85,12 @@
     <!-- Main Content -->
     <main class="flex-grow container mx-auto px-4 py-8 max-w-4xl">
 
-        <!-- Ad Space 1 (Top) -->
-        <div class="w-full h-24 ad-space mb-8 rounded-lg">
-            Ad Space (Top Banner)
+        <!-- Ad Space 1 (Top) - NOW CONTAINS USER IMAGE -->
+        <div class="w-full h-24 relative mb-8 rounded-lg overflow-hidden shadow-lg border border-gray-200">
+            <!-- ADVERTISEMENT Label -->
+            <div class="absolute top-1 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-0.5 rounded-full font-semibold z-10 tracking-widest">ADVERTISEMENT</div>
+            <!-- The user-provided image, set to cover the container. Corrected URL reference. -->
+            <img src="__uploaded_file_url('image_ed99d0.png')" alt="Sponsored Ad: Join Our Telegram Channel" class="w-full h-full object-cover">
         </div>
 
         <!-- Hero Section -->
@@ -234,8 +220,8 @@
         </div>
 
         <!-- Ad Space 2 (Middle) -->
-        <div class="w-full h-24 ad-space my-8 rounded-lg">
-            Ad Space (Mid-Content)
+        <div class="w-full h-24 bg-gray-100 my-8 rounded-lg border border-dashed border-gray-400 flex items-center justify-center text-gray-600 font-semibold text-sm transition-all duration-300 hover:bg-gray-200">
+            Ad Space (Mid-Content Placeholder)
         </div>
 
         <!-- Strategy Context Section (About) -->
